@@ -1,17 +1,20 @@
-from typing import Generator
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from ..core.config import settings
 
+from typing import AsyncGenerator
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase
+from app.core.config import settings
 
+# Thay bằng chuỗi kết nối của bạn
 DATABASE_URL = settings.DATABASE_URL
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autoflush=False, bind=engine)
+# Tạo engine và session maker
+engine = create_async_engine(DATABASE_URL)
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
-def get_db() -> Generator:
-    try:
-        db = SessionLocal()
-        yield db
-    finally:
-        db.close()
+class Base(DeclarativeBase):
+    pass
+
+# Dependency để cung cấp DB Session cho mỗi request
+async def get_db() -> AsyncGenerator[async_sessionmaker, None]:
+    async with AsyncSessionLocal() as session:
+        yield session

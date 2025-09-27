@@ -3,17 +3,20 @@ from fastapi.security import HTTPBearer
 import jwt
 from pydantic import ValidationError
 from app.core.config import settings
-from fastapi_sqlalchemy import db
+from app.db.base import get_db
+from sqlalchemy import select
 from ..domains.users.models import User
 from ..domains.auth.models import InvalidateToken
 from ..domains.users.schemas import TokenPayload
+from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from ..helpers.exception_handler import CustomException, ExceptionType
 import logging
 
 reusable_oauth2 = HTTPBearer(scheme_name='Authorization')
 
 
-def get_current_user(http_authorization_credentials=Depends(reusable_oauth2)) -> User:
+async def get_current_user(db: AsyncSession = Depends(get_db),
+                           http_authorization_credentials=Depends(reusable_oauth2)) -> User:
     """
     Decode JWT token to get user_id => return User info from DB query
     """
@@ -23,7 +26,7 @@ def get_current_user(http_authorization_credentials=Depends(reusable_oauth2)) ->
             http_authorization_credentials.credentials, settings.SECRET_KEY,
             algorithms=[settings.SECURITY_ALGORITHM]
         )
-        token_data = TokenPayload(sub=payload.get('sub'), jti=payload.get('jti'),type=payload.get('type'))
+        token_data = TokenPayload(sub=payload.get('sub'), jti=payload.get('jti'), type=payload.get('type'))
         if token_data.type == 'refresh':
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -37,7 +40,9 @@ def get_current_user(http_authorization_credentials=Depends(reusable_oauth2)) ->
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail='could not get jti'
             )
-        is_valid = db.session.query(InvalidateToken).filter(InvalidateToken.jti == token_jti).first()
+        query_is_valid = select(InvalidateToken).filter(InvalidateToken.jti == token_data.jti)
+        result = await db.execute(query_is_valid)
+        is_valid = result.scalars().first()
         logging.info(is_valid)
         if is_valid:
             raise HTTPException(
@@ -50,7 +55,7 @@ def get_current_user(http_authorization_credentials=Depends(reusable_oauth2)) ->
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Could not validate credentials",
         )
-    user = db.session.query(User).get(int_token)
+    user = await db.get(User, int(token_data.sub))
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 

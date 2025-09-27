@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16
+    volumes:
+      # ✅ THAY ĐỔI 1: Sửa dòng này từ "./docker/db" thành "postgres_data"
+      - postgres_data:/var/lib/postgresql/data
+
+      # Giữ lại bind mount cho file config là hoàn toàn bình thường
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+    environment:
+      - POSTGRES_DB=fast
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+#  alembic:
+#    image: fastapi-base:latest
+#    environment:
+#      SQL_DATABASE_URL: 'postgresql+psycopg2://postgres:postgres@db:5432/fastapi'
+#      SECRET_KEY: ${SECRET_KEY}
+#    command: [ "alembic", "upgrade", "head" ]
+#    depends_on:
+#      db:
+#        condition: service_healthy
+
+# ✅ THAY ĐỔI 2: Thêm khối này vào cuối file (cùng cấp với "services")
+volumes:
+  postgres_data:
